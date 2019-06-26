@@ -102,18 +102,20 @@ void output(float theta, int effort) {
   angle_1 = mod((phase_multiplier * theta) , 3600);   //
   angle_2 = mod((phase_multiplier * theta)+900 , 3600);
 
-  sin_coil_A  = sin_1[angle_1];
-
+  sin_coil_A = sin_1[angle_1];
   sin_coil_B = sin_1[angle_2];
 
   v_coil_A = ((effort * sin_coil_A) / 1024);
   v_coil_B = ((effort * sin_coil_B) / 1024);
 
-/*    // For debugging phase voltages:
-     SerialUSB.print(v_coil_A);
-     SerialUSB.print(",");
-     SerialUSB.println(v_coil_B);
-*/
+  // For debugging phase voltages:
+  if(0) {
+    SerialUSB.print(" ");
+    SerialUSB.print(v_coil_A);
+    SerialUSB.print(" ");
+    SerialUSB.println(v_coil_B);
+  }
+
   analogFastWrite(VREF_1, abs(v_coil_A));
   analogFastWrite(VREF_2, abs(v_coil_B));
 
@@ -507,6 +509,21 @@ void parameterQuery() {         //print current parameters in a format that can 
   SerialUSB.println(' ');
   SerialUSB.println(' ');
 
+  SerialUSB.println("//This is the encoder lookup table (created by calibration routine)");
+  SerialUSB.println("");
+
+  SerialUSB.println("const float __attribute__((__aligned__(256))) lookup[16384] = {");
+  for (int i = 0; i < 16384; i++) {
+    SerialUSB.print(lookup[i]);
+    if(i % 16)
+      SerialUSB.print(", ");
+    else
+      SerialUSB.println(",");
+  }
+  SerialUSB.println("");
+  SerialUSB.println("};");
+  SerialUSB.println("");
+
   SerialUSB.print("volatile float Fs = ");
   SerialUSB.print(Fs, DEC);
   SerialUSB.println(";  //Sample frequency in Hz");
@@ -548,18 +565,6 @@ void parameterQuery() {         //print current parameters in a format that can 
   SerialUSB.print("volatile float vLPF = ");
   SerialUSB.print(vLPF, DEC);
   SerialUSB.println(";");
-
-  SerialUSB.println("");
-  SerialUSB.println("//This is the encoder lookup table (created by calibration routine)");
-  SerialUSB.println("");
-
-  SerialUSB.println("const float __attribute__((__aligned__(256))) lookup[16384] = {");
-  for (int i = 0; i < 16384; i++) {
-    SerialUSB.print(lookup[i]);
-    SerialUSB.print(", ");
-  }
-  SerialUSB.println("");
-  SerialUSB.println("};");
 
 }
 
@@ -1071,6 +1076,8 @@ void serialMenu() {
   // SerialUSB.println(" f  -  get max loop frequency");
   SerialUSB.println("");
 }
+
+
 void sineGen() {
   int temp;
      SerialUSB.println("");
@@ -1102,30 +1109,33 @@ void stepResponse() {     // not done yet...
   enableTCInterrupts();     //start in closed loop mode
   //mode = 'x';
   r = 0;
-  delay(1000);
-  SerialUSB.println("9...");
-  delay(1000);
-  SerialUSB.println("8...");
-  delay(1000);
-  SerialUSB.println("7...");
-  delay(1000);
-  SerialUSB.println("6...");
-  delay(1000);
-  SerialUSB.println("5...");
-  delay(1000);
-  SerialUSB.println("4...");
-  delay(1000);
-  SerialUSB.println("3...");
-  delay(1000);
-  SerialUSB.println("2...");
-  delay(1000);
-  SerialUSB.println("1...");
-  delay(1000);
+  if(0) {
+    delay(1000);
+    SerialUSB.println("9...");
+    delay(1000);
+    SerialUSB.println("8...");
+    delay(1000);
+    SerialUSB.println("7...");
+    delay(1000);
+    SerialUSB.println("6...");
+    delay(1000);
+    SerialUSB.println("5...");
+    delay(1000);
+    SerialUSB.println("4...");
+    delay(1000);
+    SerialUSB.println("3...");
+    delay(1000);
+    SerialUSB.println("2...");
+    delay(1000);
+    SerialUSB.println("1...");
+    delay(1000);
+  }
   print_yw = true;
   delay(100);
-  r = 97.65;      /// choose step size as you like, 97.65 gives a nice plot since 97.65*1024 = 10,000
+  r = 10000.0/1024;      /// choose step size as you like, 97.65 gives a nice plot since 97.65*1024 = 10,000
   delay(400);
   print_yw = false;
+  delay(100);
   r = 0;
   delay(500);
   disableTCInterrupts();

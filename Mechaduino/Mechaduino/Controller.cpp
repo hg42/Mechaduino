@@ -65,29 +65,30 @@ void TC5_Handler() {                // gets called with FPID frequency
           break;
       }
 
-    y_1 = y;  //copy current value of y to previous value (y_1) for next control cycle before PA angle added
+      y_1 = y;  //copy current value of y to previous value (y_1) for next control cycle before PA angle added
 
+      if (u > 0)          //Depending on direction we want to apply torque, add or subtract a phase angle of PA for max effective torque.  PA should be equal to one full step angle: if the excitation angle is the same as the current position, we would not move!
+        {                 //You can experiment with "Phase Advance" by increasing PA when operating at high speeds
+        y += PA;          //update phase excitation angle
+        }
+      else if (u < 0)
+        {
+        y -= PA;          //update phase excitation angle
+        }
 
-    if (u > 0)          //Depending on direction we want to apply torque, add or subtract a phase angle of PA for max effective torque.  PA should be equal to one full step angle: if the excitation angle is the same as the current position, we would not move!
-      {                 //You can experiment with "Phase Advance" by increasing PA when operating at high speeds
-      y += PA;          //update phase excitation angle
-      if (u > uMAX)     // limit control effort
-        u = uMAX;       //saturation limits max current command
-      }
-    else
-      {
-      y -= PA;          //update phase excitation angle
-      if (u < -uMAX)    // limit control effort
-        u = -uMAX;      //saturation limits max current command
-      }
+      U = abs(u);
 
-      U = abs(u);       //
+      if (U > uMAX)
+        U = uMAX;
+
+      U = round(U);
+
+      output(-y, U);    // update phase currents
+
+      //SerialUSB.println(U);
 
       if (abs(e) < 0.1) ledPin_HIGH();    // turn on LED if error is less than 0.1
       else ledPin_LOW();                  //digitalWrite(ledPin, LOW);
-
-
-      output(-y, round(U));    // update phase currents
     }
 
    // e_3 = e_2;    //copy current values to previous values for next control cycle
