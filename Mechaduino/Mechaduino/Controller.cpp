@@ -83,6 +83,9 @@ void TC5_Handler() {                // gets called with FPID frequency
 
       U = round(U);
 
+      int uMIN = uMAX*0.1;
+      if(U < uMIN) U = uMIN;
+
       output(-y, U);    // update phase currents
 
       //SerialUSB.println(U);
