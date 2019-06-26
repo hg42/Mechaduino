@@ -32,6 +32,9 @@ void TC5_Handler() {                // gets called with FPID frequency
         case 'x':         // position control
             e = (r - yw);
 
+            if(abs(e) < 0.05)
+              e = 0;
+
             ITerm += (pKi * e);                             //Integral wind up limit
             if (ITerm > 150.0) ITerm = 150.0;
             else if (ITerm < -150.0) ITerm = -150.0;
