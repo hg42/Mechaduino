@@ -33,15 +33,16 @@ extern volatile float vLPFb;
 
 extern const int spr; //  200 steps per revolution
 extern const float aps; // angle per step
-extern int cpr; //counts per rev
+extern const int cpr; //counts per rev
 extern const float stepangle;
 
 extern volatile float PA;  //
+extern volatile float epsilon;  //
 
 extern const float iMAX;
 extern const float rSense;
 extern volatile int uMAX;
-
+extern volatile float uMINf;
 
 extern const int sin_1[];
 
@@ -76,7 +77,7 @@ extern const int sin_1[];
 
 #define ENABLE_PROFILE_IO    // Define to enable profiling I/O pins
 
-#ifdef ENABLE_PROFILE_IO  
+#ifdef ENABLE_PROFILE_IO
   #define TEST1   3
 
   #define TEST1_HIGH() (REG_PORT_OUTSET0 = PORT_PA09)
@@ -84,7 +85,7 @@ extern const int sin_1[];
 
 #else
   #define TEST1_HIGH()
-  #define TEST1_LOW() 
+  #define TEST1_LOW()
 #endif
 
 

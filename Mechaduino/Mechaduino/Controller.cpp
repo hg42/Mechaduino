@@ -8,6 +8,23 @@
 #include "Parameters.h"
 
 
+void hybridControl() {        //still under development
+
+  static int missed_steps = 0;
+  static float iLevel = 0.6;  //hybrid stepping current level.  In this mode, this current is continuous (unlike closed loop mode). Be very careful raising this value as you risk overheating the A4954 driver!
+  static float rSense = 0.15;
+
+  if (yw < r - aps) {
+    missed_steps -= 1;
+  }
+  else if (yw > r + aps) {
+    missed_steps += 1;
+  }
+
+  output(0.1125 * (-(r - missed_steps)), (255 / 3.3) * (iLevel * 10 * rSense));
+
+}
+
 void TC5_Handler() {                // gets called with FPID frequency
 
   static int print_counter = 0;               //this is used by step response
@@ -24,78 +41,83 @@ void TC5_Handler() {                // gets called with FPID frequency
     yw = (y + (360.0 * wrap_count));              //yw is the wrapped angle (can exceed one revolution)
 
 
-    if (mode == 'h') {                            //choose control algorithm based on mode
-      hybridControl();                            // hybrid control is still under development...
+    switch (mode) {
+
+      case 'h':         // hybrid control
+
+        hybridControl();     // still under development...
+        break;
+
+      case 'x':         // position control
+
+        e = (r - yw);
+
+        if(abs(e) < epsilon)
+          e = 0;
+
+        ITerm += (pKi * e);                             //Integral wind up limit
+        if (ITerm > 150.0) ITerm = 150.0;
+        else if (ITerm < -150.0) ITerm = -150.0;
+
+        DTerm = pLPFa*DTerm -  pLPFb*pKd*(yw-yw_1);
+
+        u = (pKp * e) + ITerm + DTerm;
+
+
+        break;
+
+      case 'v':         // velocity control
+
+        v = vLPFa*v +  vLPFb*(yw-yw_1);     //filtered velocity called "DTerm" because it is similar to derivative action in position loop
+
+        e = (r - v);   //error in degrees per rpm (sample frequency in Hz * (60 seconds/min) / (360 degrees/rev) )
+
+        ITerm += (vKi * e);                 //Integral wind up limit
+        if (ITerm > 200) ITerm = 200;
+        else if (ITerm < -200) ITerm = -200;
+
+        u = ((vKp * e) + ITerm - (vKd * (e-e_1)));
+
+        //SerialUSB.println(e);
+        break;
+
+      case 't':         // torque control
+        u = 1.0 * r ;
+        break;
+
+      default:
+        u = 0;
+        break;
     }
-    else {
-      switch (mode) {
-        case 'x':         // position control
-            e = (r - yw);
 
-            if(abs(e) < 0.05)
-              e = 0;
+    y_1 = y;  //copy current value of y to previous value (y_1) for next control cycle before PA angle added
 
-            ITerm += (pKi * e);                             //Integral wind up limit
-            if (ITerm > 150.0) ITerm = 150.0;
-            else if (ITerm < -150.0) ITerm = -150.0;
+    // Depending on direction we want to apply torque, add or subtract a phase angle of PA
+    // for max effective torque.  PA should be equal to one full step angle:
+    // if the excitation angle is the same as the current position, we would not move!
+    // You can experiment with "Phase Advance" by increasing PA when operating at high speeds
+    if (u > 0)
+      y += PA;
+    else if (u < 0)
+      y -= PA;
 
-            DTerm = pLPFa*DTerm -  pLPFb*pKd*(yw-yw_1);
+    U = abs(u);
 
-            u = (pKp * e) + ITerm + DTerm;
+    if (U > uMAX)
+      U = uMAX;
 
+    int uMIN = uMAX*uMINf;
+    if(U < uMIN)
+      U = uMIN;
 
-            break;
+    U = round(U);
 
-        case 'v':         // velocity controlr
-          v = vLPFa*v +  vLPFb*(yw-yw_1);     //filtered velocity called "DTerm" because it is similar to derivative action in position loop
+    output(-y, U);    // update phase currents
 
-          e = (r - v);   //error in degrees per rpm (sample frequency in Hz * (60 seconds/min) / (360 degrees/rev) )
+    //SerialUSB.println(U);
 
-          ITerm += (vKi * e);                 //Integral wind up limit
-          if (ITerm > 200) ITerm = 200;
-          else if (ITerm < -200) ITerm = -200;
-
-          u = ((vKp * e) + ITerm - (vKd * (e-e_1)));
-
-          //SerialUSB.println(e);
-          break;
-
-        case 't':         // torque control
-          u = 1.0 * r ;
-          break;
-        default:
-          u = 0;
-          break;
-      }
-
-      y_1 = y;  //copy current value of y to previous value (y_1) for next control cycle before PA angle added
-
-      if (u > 0)          //Depending on direction we want to apply torque, add or subtract a phase angle of PA for max effective torque.  PA should be equal to one full step angle: if the excitation angle is the same as the current position, we would not move!
-        {                 //You can experiment with "Phase Advance" by increasing PA when operating at high speeds
-        y += PA;          //update phase excitation angle
-        }
-      else if (u < 0)
-        {
-        y -= PA;          //update phase excitation angle
-        }
-
-      U = abs(u);
-
-      if (U > uMAX)
-        U = uMAX;
-
-      U = round(U);
-
-      int uMIN = uMAX*0.1;
-      if(U < uMIN) U = uMIN;
-
-      output(-y, U);    // update phase currents
-
-      //SerialUSB.println(U);
-
-      if (abs(e) < 0.1) ledPin_HIGH();    // turn on LED if error is less than 0.1
-      else ledPin_LOW();                  //digitalWrite(ledPin, LOW);
-    }
+    if (abs(e) < 0.1) ledPin_HIGH();    // turn on LED if error is less than 0.1
+    else ledPin_LOW();                  //digitalWrite(ledPin, LOW);
 
    // e_3 = e_2;    //copy current values to previous values for next control cycle
     e_2 = e_1;    //these past values can be useful for more complex controllers/filters.  Uncomment as necessary

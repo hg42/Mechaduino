@@ -23,20 +23,22 @@ volatile float vLPF = 100.0;       //break frequency in hertz
 volatile float pLPFa = exp(pLPF*-2*3.14159/Fs); // z = e^st pole mapping
 volatile float pLPFb = (1.0-pLPFa);
 volatile float vLPFa = exp(vLPF*-2*3.14159/Fs); // z = e^st pole mapping
-volatile float vLPFb = (1.0-vLPFa)* Fs * 0.16666667;
+volatile float vLPFb = (1.0-vLPFa) * Fs / 6.0;
 
 
 const int usteps = 32;              // microsteps/step
 const int spr = 200;                // 200 steps per revolution  -- for 400 step/rev, you should only need to edit this value
 const float aps = 360.0/ spr;       // angle per step
-int cpr = 16384;                    // counts per rev
+const int cpr = 16384;              // counts per rev
 const float stepangle = aps/usteps; // for step/dir interrupt: aps/32 is the equivalent of 1/32 microsteps
 
 volatile float PA = aps;            // Phase advance...aps = 1.8 for 200 steps per rev, 0.9 for 400
+volatile float epsilon = 0.05;
 
 const float iMAX = 1.0;             // Be careful adjusting this.  While the A4954 driver is rated for 2.0 Amp peak currents, it cannot handle these currents continuously.  Depending on how you operate the Mechaduino, you may be able to safely raise this value...please refer to the A4954 datasheet for more info
 const float rSense = 0.150;
 volatile int uMAX = (255/3.3)*(iMAX*10*rSense);   // 255 for 8-bit pwm, 1023 for 10 bit, must also edit analogFastWrite
+volatile float uMINf = 0.05;
 
 // A sine lookup table is faster than using the built in sin() function
 // for motor commutation... shifted by 0 degrees (this appears to allow
@@ -425,7 +427,7 @@ const float __attribute__((__aligned__(256))) lookup[16384] = {
 69.76,
 69.78,
 69.79,
-69.80,         
+69.80,
 69.81,
 69.82,
 69.83,
@@ -435,7 +437,7 @@ const float __attribute__((__aligned__(256))) lookup[16384] = {
 69.87,
 69.89,
 69.90,
-69.91,         
+69.91,
 69.92,
 69.93,
 69.94,

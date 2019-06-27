@@ -515,10 +515,10 @@ void parameterQuery() {         //print current parameters in a format that can 
   SerialUSB.println("const float __attribute__((__aligned__(256))) lookup[16384] = {");
   for (int i = 0; i < 16384; i++) {
     SerialUSB.print(lookup[i]);
-    if(i % 16)
-      SerialUSB.print(", ");
-    else
+    if(i % 16 == 15)
       SerialUSB.println(",");
+    else
+      SerialUSB.print(", ");
   }
   SerialUSB.println("");
   SerialUSB.println("};");
@@ -696,12 +696,20 @@ void print_angle()                ///////////////////////////////////       PRIN
   SerialUSB.print("stepNumber: ");
   SerialUSB.print(stepNumber, DEC);
   SerialUSB.print(" , ");
-//  SerialUSB.print(stepNumber * aps, DEC);
-//  SerialUSB.print(" , ");
+  SerialUSB.print(stepNumber * aps, DEC);
+  SerialUSB.print(" , ");
   SerialUSB.print("Angle: ");
   SerialUSB.print(read_angle(), 2);
   SerialUSB.print(", raw encoder: ");
   SerialUSB.print(readEncoder());
+  SerialUSB.print(", e: ");
+  SerialUSB.print(e_1);
+  SerialUSB.print(", ");
+  SerialUSB.print(e_2);
+  SerialUSB.print(", u: ");
+  SerialUSB.print(u_1);
+  SerialUSB.print(", ");
+  SerialUSB.print(u_2);
   SerialUSB.println();
 }
 
@@ -837,10 +845,9 @@ void parameterEditmain() {
     default:
       {}
       break;
-
-
-
   }
+
+  print_angle();
 }
 
 void parameterEditp() {
@@ -1000,6 +1007,10 @@ void parameterEdito() {
   SerialUSB.println();
   SerialUSB.print("p ----- PA = ");
   SerialUSB.println(PA, DEC);
+  SerialUSB.print("e ----- epsilon = ");
+  SerialUSB.println(epsilon, DEC);
+  SerialUSB.print("m ----- umin (factor) = ");
+  SerialUSB.println(uMINf, DEC);
   SerialUSB.println();
 
 
@@ -1007,40 +1018,40 @@ void parameterEdito() {
   char inChar3 = (char)SerialUSB.read();
 
   switch (inChar3) {
+
     case 'p':
-      {
-        SerialUSB.println("PA = ?");
-        while (SerialUSB.available() == 0)  {}
-        PA = SerialUSB.parseFloat();
-        SerialUSB.print("new PA = ");
-        SerialUSB.println(PA, DEC);
-      }
 
+      SerialUSB.println("PA = ?");
+      while (SerialUSB.available() == 0)  {}
+      PA = SerialUSB.parseFloat();
+      SerialUSB.print("new PA = ");
+      SerialUSB.println(PA, DEC);
       break;
+
+    case 'e':
+
+      SerialUSB.println("epsilon = ?");
+      while (SerialUSB.available() == 0)  {}
+      epsilon = SerialUSB.parseFloat();
+      SerialUSB.print("new epsilon = ");
+      SerialUSB.println(epsilon, DEC);
+      break;
+
+    case 'm':
+
+      SerialUSB.println("umin = ?");
+      while (SerialUSB.available() == 0)  {}
+      uMINf = SerialUSB.parseFloat();
+      SerialUSB.print("new umin = ");
+      SerialUSB.println(uMINf, DEC);
+      break;
+
     default:
-      {}
       break;
   }
 }
 
 
-
-void hybridControl() {        //still under development
-
-  static int missed_steps = 0;
-  static float iLevel = 0.6;  //hybrid stepping current level.  In this mode, this current is continuous (unlike closed loop mode). Be very careful raising this value as you risk overheating the A4954 driver!
-  static float rSense = 0.15;
-
-  if (yw < r - aps) {
-    missed_steps -= 1;
-  }
-  else if (yw > r + aps) {
-    missed_steps += 1;
-  }
-
-  output(0.1125 * (-(r - missed_steps)), (255 / 3.3) * (iLevel * 10 * rSense));
-
-}
 
 void serialMenu() {
   SerialUSB.println("");
@@ -1103,13 +1114,13 @@ void stepResponse() {     // not done yet...
   SerialUSB.println("");
   SerialUSB.println("--------------------------------");
   SerialUSB.println("");
-  SerialUSB.println("Get ready for step response!");
-  SerialUSB.println("Close Serial Monitor and open Tools>>Serial Plotter");
-  SerialUSB.println("You have 10 seconds...");
   enableTCInterrupts();     //start in closed loop mode
   //mode = 'x';
   r = 0;
   if(0) {
+    SerialUSB.println("Get ready for step response!");
+    SerialUSB.println("Close Serial Monitor and open Tools>>Serial Plotter");
+    SerialUSB.println("You have 10 seconds...");
     delay(1000);
     SerialUSB.println("9...");
     delay(1000);
