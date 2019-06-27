@@ -179,6 +179,229 @@ static void store_lookup(float lookupAngle)
 
 void calibrate() {   /// this is the calibration routine
 
+  int encoderReading = 0;     // or float?  not sure if we can average for more res?
+  int currentencoderReading = 0;
+  int lastencoderReading = 0;
+  int revolutions = 4;        // how many revolutions to average
+  int avg = 10;               // how many readings to average
+
+  int iStart = 0;             // encoder zero position index
+  int jStart = 0;
+  int stepNo = 0;
+
+  int fullStepReadings[spr];
+
+  int fullStep = 0;
+  int ticks = 0;
+  float lookupAngle = 0.0;
+  SerialUSB.println("Beginning calibration routine...");
+
+  encoderReading = readEncoder();
+  dir = true;
+  oneStep();
+  delay(500);
+
+  if ((readEncoder() - encoderReading) < 0)   //check which way motor moves when dir = true
+  {
+    SerialUSB.println("Wired backwards");    // rewiring either phase should fix this.  You may get a false message if you happen to be near the point where the encoder rolls over...
+    return;
+  }
+
+  while (stepNumber != 0) {       //go to step zero
+    if (stepNumber > 0) {
+      dir = true;
+    }
+    else
+    {
+      dir = false;
+    }
+    oneStep();
+    delay(100);
+  }
+
+
+  for (int x = 0; x < spr; x++) {     // clear full step positions
+    fullStepReadings[x] = 0;
+  }
+
+  for (int rev = 0; rev < revolutions; rev++) {
+
+    dir = ! (rev & 1);
+
+    for (int x = 0; x < spr; x++) {     //step through all full step positions, recording their encoder readings
+
+      encoderReading = 0;
+      delay(5);                         //moving too fast may not give accurate readings.  Motor needs time to settle after each step.
+      lastencoderReading = readEncoder();
+
+      for (int reading = 0; reading < avg; reading++) {  //average multple readings at each step
+        currentencoderReading = readEncoder();
+
+        if ((currentencoderReading-lastencoderReading)<(-(cpr/2))){
+          currentencoderReading += cpr;
+        }
+        else if ((currentencoderReading-lastencoderReading)>((cpr/2))){
+          currentencoderReading -= cpr;
+        }
+
+        encoderReading += currentencoderReading;
+        delay(10);
+        lastencoderReading = currentencoderReading;
+      }
+
+      encoderReading = encoderReading / avg;
+
+      if (encoderReading>cpr){
+        encoderReading-= cpr;
+      }
+      else if (encoderReading<0){
+        encoderReading+= cpr;
+      }
+
+
+      fullStepReadings[x] += encoderReading;
+
+
+      // SerialUSB.println(fullStepReadings[x], DEC);      //print readings as a sanity check
+
+      if (x % 20 == 0)
+      {
+        SerialUSB.println();
+        SerialUSB.print(100*x/spr);
+        SerialUSB.print("% ");
+      } else {
+        SerialUSB.print('.');
+      }
+
+      oneStep(uMAX);
+    }
+  }
+
+  for (int x = 0; x < spr; x++) {     // clear full step positions
+    fullStepReadings[x] /= revolutions;
+  }
+
+  SerialUSB.println();
+
+ // SerialUSB.println(" ");
+ // SerialUSB.println("ticks:");                        //"ticks" represents the number of encoder counts between successive steps... these should be around 82 for a 1.8 degree stepper
+ // SerialUSB.println(" ");
+  for (int i = 0; i < spr; i++) {
+    ticks = fullStepReadings[mod((i + 1), spr)] - fullStepReadings[mod((i), spr)];
+    if (ticks < -15000) {
+      ticks += cpr;
+
+    }
+    else if (ticks > 15000) {
+      ticks -= cpr;
+    }
+   // SerialUSB.println(ticks);
+
+    if (ticks > 1) {                                    //note starting point with iStart,jStart
+      for (int j = 0; j < ticks; j++) {
+        stepNo = (mod(fullStepReadings[i] + j, cpr));
+        // SerialUSB.println(stepNo);
+        if (stepNo == 0) {
+          iStart = i;
+          jStart = j;
+        }
+
+      }
+    }
+
+    if (ticks < 1) {                                    //note starting point with iStart,jStart
+      for (int j = -ticks; j > 0; j--) {
+        stepNo = (mod(fullStepReadings[spr - 1 - i] + j, cpr));
+        // SerialUSB.println(stepNo);
+        if (stepNo == 0) {
+          iStart = i;
+          jStart = j;
+        }
+
+      }
+    }
+
+  }
+
+  // The code below generates the lookup table by intepolating between
+  // full steps and mapping each encoder count to a calibrated angle
+  // The lookup table is too big to store in volatile memory,
+  // so we must generate and store it into the flash on the fly
+
+  // begin the write to the calibration table
+  page_count = 0;
+  page_ptr = (const uint8_t*) lookup;
+  SerialUSB.print("Writing to flash 0x");
+  SerialUSB.print((uintptr_t) page_ptr, HEX);
+  SerialUSB.print(" page size PSZ=");
+  SerialUSB.print(NVMCTRL->PARAM.bit.PSZ);
+
+  for (int i = iStart; i < (iStart + spr + 1); i++) {
+    ticks = fullStepReadings[mod((i + 1), spr)] - fullStepReadings[mod((i), spr)];
+
+    if (ticks < -15000) {           //check if current interval wraps over encoder's zero positon
+      ticks += cpr;
+    }
+    else if (ticks > 15000) {
+      ticks -= cpr;
+    }
+    //Here we print an interpolated angle corresponding to each encoder count (in order)
+    if (ticks > 1) {              //if encoder counts were increasing during cal routine...
+
+      if (i == iStart) { //this is an edge case
+        for (int j = jStart; j < ticks; j++) {
+	  store_lookup(0.001 * mod(1000 * ((aps * i) + ((aps * j ) / float(ticks))), 360000.0));
+        }
+      }
+
+      else if (i == (iStart + spr)) { //this is an edge case
+        for (int j = 0; j < jStart; j++) {
+	  store_lookup(0.001 * mod(1000 * ((aps * i) + ((aps * j ) / float(ticks))), 360000.0));
+        }
+      }
+      else {                        //this is the general case
+        for (int j = 0; j < ticks; j++) {
+	  store_lookup(0.001 * mod(1000 * ((aps * i) + ((aps * j ) / float(ticks))), 360000.0));
+        }
+      }
+    }
+
+    else if (ticks < 1) {             //similar to above... for case when encoder counts were decreasing during cal routine
+      if (i == iStart) {
+        for (int j = - ticks; j > (jStart); j--) {
+          store_lookup(0.001 * mod(1000 * (aps * (i) + (aps * ((ticks + j)) / float(ticks))), 360000.0));
+        }
+      }
+      else if (i == iStart + spr) {
+        for (int j = jStart; j > 0; j--) {
+          store_lookup(0.001 * mod(1000 * (aps * (i) + (aps * ((ticks + j)) / float(ticks))), 360000.0));
+        }
+      }
+      else {
+        for (int j = - ticks; j > 0; j--) {
+          store_lookup(0.001 * mod(1000 * (aps * (i) + (aps * ((ticks + j)) / float(ticks))), 360000.0));
+        }
+      }
+
+    }
+
+
+  }
+
+  if (page_count != 0)
+	write_page();
+
+  SerialUSB.println(" ");
+  SerialUSB.println(" ");
+  SerialUSB.println("Calibration complete!");
+  SerialUSB.println("The calibration table has been written to non-volatile Flash memory!");
+  SerialUSB.println(" ");
+  SerialUSB.println(" ");
+}
+
+
+void calibrate2() {   /// this is the calibration routine
+
   int encoderReading = 0;     //or float?  not sure if we can average for more res?
   int currentencoderReading = 0;
   int lastencoderReading = 0;
@@ -259,7 +482,8 @@ void calibrate() {   /// this is the calibration routine
 
     oneStep();
   }
-      SerialUSB.println();
+
+  SerialUSB.println();
 
  // SerialUSB.println(" ");
  // SerialUSB.println("ticks:");                        //"ticks" represents the number of encoder counts between successive steps... these should be around 82 for a 1.8 degree stepper
@@ -380,127 +604,20 @@ void calibrate() {   /// this is the calibration routine
 
 float read_angle()
 {
-  const int avg = 10;            //average a few readings
+  const int avg = 100;            //average a few readings
   int encoderReading = 0;
 
   disableTCInterrupts();        //can't use readEncoder while in closed loop
 
   for (int reading = 0; reading < avg; reading++) {  //average multple readings at each step
     encoderReading += readEncoder();
-    delay(10);
+    delay(1);
     }
 
   //return encoderReading * (360.0 / 16384.0) / avg;
   return lookup[encoderReading / avg];
 }
 
-
-void serialCheck() {        //Monitors serial for commands.  Must be called in routinely in loop for serial interface to work.
-
-  if (SerialUSB.available()) {
-
-    char inChar = (char)SerialUSB.read();
-
-    switch (inChar) {
-
-
-      case 'p':             //print
-        print_angle();
-        break;
-
-      case 's':             //step
-        oneStep();
-        print_angle();
-        break;
-
-      case 'd':             //dir
-        if (dir) {
-          dir = false;
-        }
-        else {
-          dir = true;
-        }
-        break;
-
-      case 'w':                //old command
-        calibrate();           //cal routine
-        break;
-
-      case 'c':
-        calibrate();           //cal routine
-        break;
-
-      case 'e':
-        readEncoderDiagnostics();   //encoder error?
-        break;
-
-      case 'y':
-        r = (read_angle()+(360.0 * wrap_count));          // hold the current position
-        SerialUSB.print("New setpoint ");
-        SerialUSB.println(r, 2);
-        enableTCInterrupts();      //enable closed loop
-        break;
-
-      case 'n':
-        disableTCInterrupts();      //disable closed loop
-        analogFastWrite(VREF_2, 0);     //set phase currents to zero
-        analogFastWrite(VREF_1, 0);
-        break;
-
-      case 'r':             //new setpoint
-        SerialUSB.println("Enter setpoint:");
-        while (SerialUSB.available() == 0)  {}
-        r = SerialUSB.parseFloat();
-        SerialUSB.println(r);
-        break;
-
-      case 'x':
-        mode = 'x';           //position loop
-        break;
-
-      case 'v':
-        mode = 'v';           //velocity loop
-        break;
-
-      case 't':
-        mode = 't';           //torque loop
-        break;
-
-      case 'h':               //hybrid mode
-        mode = 'h';
-        break;
-
-      case 'q':
-        parameterQuery();     // prints copy-able parameters
-        break;
-
-      case 'a':             //anticogging
-        antiCoggingCal();
-        break;
-
-      case 'k':
-        parameterEditmain();
-        break;
-
-      case 'g':
-        sineGen();
-        break;
-
-      case 'm':
-        serialMenu();
-        break;
-
-      case 'j':
-        stepResponse();
-        break;
-
-
-      default:
-        break;
-    }
-  }
-
-}
 
 
 void parameterQuery() {         //print current parameters in a format that can be copied directly in to Parameters.cpp
@@ -810,7 +927,7 @@ void antiCoggingCal() {       //This is still under development...  The idea is 
 
 
 
-void parameterEditmain() {
+void parameterEdit_main() {
 
   SerialUSB.println();
   SerialUSB.println("Edit parameters:");
@@ -827,21 +944,22 @@ void parameterEditmain() {
   switch (inChar2) {
     case 'p':
       {
-        parameterEditp();
+        parameterEdit_p();
       }
       break;
 
     case 'v':
       {
-        parameterEditv();
+        parameterEdit_v();
       }
       break;
 
     case 'o':
       {
-        parameterEdito();
+        parameterEdit_o();
       }
       break;
+
     default:
       {}
       break;
@@ -850,7 +968,7 @@ void parameterEditmain() {
   print_angle();
 }
 
-void parameterEditp() {
+void parameterEdit_p() {
 
   bool quit = false;
   while(!quit){
@@ -927,7 +1045,7 @@ void parameterEditp() {
   }
 }
 
-void parameterEditv() {
+void parameterEdit_v() {
   bool quit = false;
   while(!quit){
     SerialUSB.println("Edit velocity loop gains:");
@@ -1000,7 +1118,7 @@ void parameterEditv() {
   }
 }
 
-void parameterEdito() {
+void parameterEdit_o() {
 
 
   SerialUSB.println("Edit other parameters:");
@@ -1053,40 +1171,6 @@ void parameterEdito() {
 
 
 
-void serialMenu() {
-  SerialUSB.println("");
-  SerialUSB.println("");
-  SerialUSB.println("----- Mechaduino 0.X -----");
-  SerialUSB.print("Firmware: ");
-  SerialUSB.println(firmware_version);
-  SerialUSB.print("Identifier: ");
-  SerialUSB.println(identifier);
-  SerialUSB.println("");
-  SerialUSB.println("Main menu");
-  SerialUSB.println("");
-  SerialUSB.println(" s  -  step");
-  SerialUSB.println(" d  -  dir");
-  SerialUSB.println(" p  -  print angle");
-  SerialUSB.println("");
-  SerialUSB.println(" c  -  write new calibration table");
-  SerialUSB.println(" e  -  check encoder diagnositics");
-  SerialUSB.println(" q  -  parameter query");
-  SerialUSB.println("");
-  SerialUSB.println(" x  -  position mode");
-  SerialUSB.println(" v  -  velocity mode");
-  SerialUSB.println(" t  -  torque mode");
-  SerialUSB.println("");
-  SerialUSB.println(" y  -  enable control loop");
-  SerialUSB.println(" n  -  disable control loop");
-  SerialUSB.println(" r  -  enter new setpoint");
-  SerialUSB.println("");
-   SerialUSB.println(" j  -  step response");
-  SerialUSB.println(" k  -  edit controller gains -- note, these edits are stored in volatile memory and will be reset if power is cycled");
-  SerialUSB.println(" g  -  generate sine commutation table");
-  SerialUSB.println(" m  -  print main menu");
-  // SerialUSB.println(" f  -  get max loop frequency");
-  SerialUSB.println("");
-}
 
 
 void sineGen() {
@@ -1151,6 +1235,7 @@ void stepResponse() {     // not done yet...
   delay(500);
   disableTCInterrupts();
 
+  print_angle();
 }
 
 
@@ -1330,3 +1415,141 @@ void moveAbs(float pos_final,int vel_max, int accel){
   //SerialUSB.print(micros()-start);
 
 }
+
+
+void do_step() {
+  oneStep();
+  print_angle();
+}
+
+void do_dir() {
+  if (dir) {
+    dir = false;
+  }
+  else {
+    dir = true;
+  }
+}
+
+void do_closedLoop() {
+  r = (read_angle()+(360.0 * wrap_count));          // hold the current position
+  SerialUSB.print("New setpoint ");
+  SerialUSB.println(r, 2);
+  enableTCInterrupts();      //enable closed loop
+  print_angle();
+}
+
+void do_openLoop() {
+  disableTCInterrupts();      //disable closed loop
+  analogFastWrite(VREF_2, 0);     //set phase currents to zero
+  analogFastWrite(VREF_1, 0);
+}
+
+void do_setpoint() {
+  SerialUSB.println("Enter setpoint:");
+  while (SerialUSB.available() == 0)  {}
+  r = SerialUSB.parseFloat();
+  SerialUSB.println(r);
+  print_angle();
+}
+
+void do_mode_x() {
+  mode = 'x';           // position loop
+}
+
+void do_mode_v() {
+  mode = 'v';           // velocity loop
+}
+
+void do_mode_t() {
+  mode = 't';           // torque loop
+}
+
+void do_mode_h() {
+  mode = 'h';           // hybrid loop
+}
+
+
+struct entry { void (*action)(); char* line; };
+
+static entry menu[] = {
+  {     0, ""},
+  {     do_step,                "s  -  step"},
+  {     do_dir,                 "d  -  dir"},
+  {     print_angle,            "p  -  print angle"},
+  {     0, ""},
+  {     calibrate,              "c  -  write new calibration table"},
+  {     calibrate2,             "C  -  write new calibration table (old)"},
+  {     readEncoderDiagnostics, "e  -  check encoder diagnositics"},
+  {     antiCoggingCal,         "a  -  anti cogging calibration"},
+  {     parameterQuery,         "q  -  parameter query"},
+  {     0, ""},
+  {     0,                      "x  -  position mode"},
+  {     0,                      "v  -  velocity mode"},
+  {     0,                      "t  -  torque mode"},
+  {     0, ""},
+  {     do_closedLoop,          "y  -  enable control loop"},
+  {     do_openLoop,            "n  -  disable control loop"},
+  {     do_setpoint,            "r  -  enter new setpoint"},
+  {     0, ""},
+  {     stepResponse,           "j  -  step response"},
+  {     parameterEdit_main,     "k  -  edit controller gains -- these edits are stored in volatile memory and will be reset if power is cycled"},
+  {     sineGen,                "g  -  generate sine commutation table"},
+  {     serialMenu,             "m  -  print main menu"},
+  //{     0,                      "f  -  get max loop frequency"},
+  {     0, ""},
+  {     0,                      0 }
+};
+
+void printMenu() {
+  entry* e = menu;
+  while(e->line) {
+    SerialUSB.print("  ");
+    SerialUSB.println(e->line);
+    e++;
+  }
+}
+
+void doMenu(char inChar) {
+  entry* e = menu;
+  while(e->line) {
+    if(inChar == e->line[0]) {
+      SerialUSB.print("> ");
+      SerialUSB.println(e->line);
+      e->action();
+      return;
+    }
+    e++;
+  }
+  SerialUSB.println("???");
+  printMenu();
+}
+
+void serialMenu() {
+  SerialUSB.println("");
+  SerialUSB.println("");
+  SerialUSB.println("----- Mechaduino 0.X -----");
+  SerialUSB.print("Firmware: ");
+  SerialUSB.println(firmware_version);
+  SerialUSB.print("Identifier: ");
+  SerialUSB.println(identifier);
+  SerialUSB.println("");
+  SerialUSB.println("Main menu");
+  SerialUSB.println("");
+  printMenu();
+  SerialUSB.println("");
+}
+
+
+void serialCheck() {        //Monitors serial for commands.  Must be called in routinely in loop for serial interface to work.
+
+  if (SerialUSB.available()) {
+
+    char inChar = (char)SerialUSB.read();
+
+    doMenu(inChar);
+  }
+
+}
+
+
