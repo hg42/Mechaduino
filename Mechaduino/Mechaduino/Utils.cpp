@@ -570,7 +570,7 @@ void parameterQuery() {         //print current parameters in a format that can 
 
 
 
-void oneStep() {           /////////////////////////////////   oneStep    ///////////////////////////////
+void oneStep(int effort) {           /////////////////////////////////   oneStep    ///////////////////////////////
 
   if (!dir) {
     stepNumber += 1;
@@ -580,7 +580,7 @@ void oneStep() {           /////////////////////////////////   oneStep    //////
   }
 
   //output(1.8 * stepNumber, 64); //updata 1.8 to aps..., second number is control effort
-  output(aps * stepNumber, (int)(0.33 * uMAX));
+  output(aps * stepNumber, effort ? effort : (int)(0.33 * uMAX));
   delay(10);
 }
 
