@@ -3,7 +3,7 @@
 #ifndef __PARAMETERS_H__
 #define __PARAMETERS_H__
 
-#define firmware_version "0.1.5"    //firmware version
+#define firmware_version "0.1.5-hg" //firmware version
 #define identifier "x"              // change this to help keep track of multiple mechaduinos (printed on startup)
 
 //----Current Parameters-----
@@ -36,8 +36,10 @@ extern const float aps; // angle per step
 extern const int cpr; //counts per rev
 extern const float stepangle;
 
-extern volatile float PA;  //
-extern volatile float epsilon;  //
+extern volatile float PA;       // phase adjust
+extern volatile float epsilon;  // ignore angles smaller than this in PID (dead band)
+
+extern volatile int step_delay;
 
 extern const float iMAX;
 extern const float rSense;
