@@ -72,8 +72,8 @@ void stepInterrupt() {
 }
 
 void dirInterrupt() {
-  if (REG_PORT_IN0 & PORT_PA11) dir = false; // check if dir_pin is HIGH
-  else dir = true;
+  if (REG_PORT_IN0 & PORT_PA11) dir = true; // check if dir_pin is HIGH
+  else dir = false;
 }
 
 void enableInterrupt() {            //enable pin interrupt handler
