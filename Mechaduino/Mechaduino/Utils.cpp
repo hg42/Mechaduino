@@ -288,11 +288,11 @@ void calibrate() {   /// this is the calibration routine
  // SerialUSB.println(" ");
   for (int i = 0; i < spr; i++) {
     ticks = fullStepReadings[mod((i + 1), spr)] - fullStepReadings[mod((i), spr)];
-    if (ticks < -15000) {
+    if (ticks < -cpr/2) {
       ticks += cpr;
 
     }
-    else if (ticks > 15000) {
+    else if (ticks > cpr/2) {
       ticks -= cpr;
     }
    // SerialUSB.println(ticks);
@@ -323,7 +323,7 @@ void calibrate() {   /// this is the calibration routine
 
   }
 
-  // The code below generates the lookup table by intepolating between
+  // The code below generates the lookup table by interpolating between
   // full steps and mapping each encoder count to a calibrated angle
   // The lookup table is too big to store in volatile memory,
   // so we must generate and store it into the flash on the fly
@@ -339,10 +339,10 @@ void calibrate() {   /// this is the calibration routine
   for (int i = iStart; i < (iStart + spr + 1); i++) {
     ticks = fullStepReadings[mod((i + 1), spr)] - fullStepReadings[mod((i), spr)];
 
-    if (ticks < -15000) {           //check if current interval wraps over encoder's zero positon
+    if (ticks < -cpr/2) {           //check if current interval wraps over encoder's zero positon
       ticks += cpr;
     }
-    else if (ticks > 15000) {
+    else if (ticks > cpr/2) {
       ticks -= cpr;
     }
     //Here we print an interpolated angle corresponding to each encoder count (in order)
@@ -810,10 +810,12 @@ void readEncoderDiagnostics()           ////////////////////////////////////////
 
 void print_angle()                ///////////////////////////////////       PRINT_ANGLE   /////////////////////////////////
 {
-  SerialUSB.print("stepNumber: ");
+  SerialUSB.print("step: ");
   SerialUSB.print(stepNumber, DEC);
   SerialUSB.print(" , ");
   SerialUSB.print(stepNumber * aps, DEC);
+  SerialUSB.print(" , dir: ");
+  SerialUSB.print(dir);
   SerialUSB.print(" , ");
   SerialUSB.print("Angle: ");
   SerialUSB.print(read_angle(), 2);
@@ -1423,12 +1425,8 @@ void do_step() {
 }
 
 void do_dir() {
-  if (dir) {
-    dir = false;
-  }
-  else {
-    dir = true;
-  }
+  dir = ! dir;
+  print_angle();
 }
 
 void do_closedLoop() {
