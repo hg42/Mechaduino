@@ -196,27 +196,16 @@ void calibrate() {   /// this is the calibration routine
   float lookupAngle = 0.0;
   SerialUSB.println("Beginning calibration routine...");
 
-  encoderReading = readEncoder();
+  lastencoderReading = readEncoder();
   dir = true;
   oneStep();
-  delay(500);
+  currentencoderReading = readEncoder();
+  int diff = currentencoderReading - lastencoderReading;
 
-  if ((readEncoder() - encoderReading) < 0)   //check which way motor moves when dir = true
+  if ((diff < 0) && (diff > -cpr/2))   //check which way motor moves when dir = true
   {
     SerialUSB.println("Wired backwards");    // rewiring either phase should fix this.  You may get a false message if you happen to be near the point where the encoder rolls over...
     return;
-  }
-
-  while (stepNumber != 0) {       //go to step zero
-    if (stepNumber > 0) {
-      dir = true;
-    }
-    else
-    {
-      dir = false;
-    }
-    oneStep();
-    delay(100);
   }
 
 
@@ -226,12 +215,51 @@ void calibrate() {   /// this is the calibration routine
 
   for (int rev = 0; rev < revolutions; rev++) {
 
+    // find wrap point
+
+    SerialUSB.println("");
+    SerialUSB.println("find wrap point...");
+
+    // ensure start above zero
+    dir = true;
+    oneStep();
+    oneStep();
+
+    dir = false;
+    lastencoderReading = readEncoder();
+    SerialUSB.println(lastencoderReading);
+
+    for (int reading = 0; reading < cpr; reading++) {
+      currentencoderReading = readEncoder();
+      SerialUSB.println(currentencoderReading);
+
+      if (abs(currentencoderReading-lastencoderReading)>(cpr/2)){
+        break;
+      }
+
+      lastencoderReading = currentencoderReading;
+
+      oneStep();
+    }
+
+    dir = true;
+    oneStep();
+    stepNumber = 0;
+
+    currentencoderReading = readEncoder();
+    SerialUSB.println(currentencoderReading);
+
     dir = ! (rev & 1);
+
+    if(!dir) {
+      // start at upper end
+      oneStep();
+    }
 
     for (int x = 0; x < spr; x++) {     //step through all full step positions, recording their encoder readings
 
       encoderReading = 0;
-      delay(5);                         //moving too fast may not give accurate readings.  Motor needs time to settle after each step.
+
       lastencoderReading = readEncoder();
 
       for (int reading = 0; reading < avg; reading++) {  //average multple readings at each step
@@ -245,7 +273,9 @@ void calibrate() {   /// this is the calibration routine
         }
 
         encoderReading += currentencoderReading;
-        delay(10);
+
+        //delay(10);
+
         lastencoderReading = currentencoderReading;
       }
 
@@ -259,7 +289,10 @@ void calibrate() {   /// this is the calibration routine
       }
 
 
-      fullStepReadings[x] += encoderReading;
+      fullStepReadings[stepNumber] += encoderReading;
+      SerialUSB.print(stepNumber);
+      SerialUSB.print(" : ");
+      SerialUSB.println(fullStepReadings[stepNumber], DEC);
 
 
       // SerialUSB.println(fullStepReadings[x], DEC);      //print readings as a sanity check
@@ -273,7 +306,7 @@ void calibrate() {   /// this is the calibration routine
         SerialUSB.print('.');
       }
 
-      oneStep(uMAX);
+      oneStep();
     }
   }
 
@@ -283,9 +316,15 @@ void calibrate() {   /// this is the calibration routine
 
   SerialUSB.println();
 
- // SerialUSB.println(" ");
- // SerialUSB.println("ticks:");                        //"ticks" represents the number of encoder counts between successive steps... these should be around 82 for a 1.8 degree stepper
- // SerialUSB.println(" ");
+  for (int x = 0; x < spr; x++) {     // print full step positions
+    SerialUSB.print(fullStepReadings[x]);
+    if(x % 16 == 15)
+      SerialUSB.println(",");
+    else
+      SerialUSB.print(", ");
+  }
+
+if(1){
   for (int i = 0; i < spr; i++) {
     ticks = fullStepReadings[mod((i + 1), spr)] - fullStepReadings[mod((i), spr)];
     if (ticks < -cpr/2) {
@@ -295,6 +334,9 @@ void calibrate() {   /// this is the calibration routine
     else if (ticks > cpr/2) {
       ticks -= cpr;
     }
+   // SerialUSB.println(" ");
+   // SerialUSB.println("ticks:");                        //"ticks" represents the number of encoder counts between successive steps... these should be around 82 for a 1.8 degree stepper
+   // SerialUSB.println(" ");
    // SerialUSB.println(ticks);
 
     if (ticks > 1) {                                    //note starting point with iStart,jStart
@@ -353,7 +395,6 @@ void calibrate() {   /// this is the calibration routine
 	  store_lookup(0.001 * mod(1000 * ((aps * i) + ((aps * j ) / float(ticks))), 360000.0));
         }
       }
-
       else if (i == (iStart + spr)) { //this is an edge case
         for (int j = 0; j < jStart; j++) {
 	  store_lookup(0.001 * mod(1000 * ((aps * i) + ((aps * j ) / float(ticks))), 360000.0));
@@ -365,7 +406,6 @@ void calibrate() {   /// this is the calibration routine
         }
       }
     }
-
     else if (ticks < 1) {             //similar to above... for case when encoder counts were decreasing during cal routine
       if (i == iStart) {
         for (int j = - ticks; j > (jStart); j--) {
@@ -391,16 +431,18 @@ void calibrate() {   /// this is the calibration routine
   if (page_count != 0)
 	write_page();
 
+  SerialUSB.println("The calibration table has been written to non-volatile Flash memory!");
+}
+
   SerialUSB.println(" ");
   SerialUSB.println(" ");
   SerialUSB.println("Calibration complete!");
-  SerialUSB.println("The calibration table has been written to non-volatile Flash memory!");
   SerialUSB.println(" ");
   SerialUSB.println(" ");
 }
 
 
-void calibrate2() {   /// this is the calibration routine
+void calibrate2() {   /// this is the original Mechaduino calibration routine
 
   int encoderReading = 0;     //or float?  not sure if we can average for more res?
   int currentencoderReading = 0;
@@ -421,7 +463,6 @@ void calibrate2() {   /// this is the calibration routine
   encoderReading = readEncoder();
   dir = true;
   oneStep();
-  delay(500);
 
   if ((readEncoder() - encoderReading) < 0)   //check which way motor moves when dir = true
   {
@@ -430,7 +471,7 @@ void calibrate2() {   /// this is the calibration routine
   }
 
   while (stepNumber != 0) {       //go to step zero
-    if (stepNumber > 0) {
+    if (stepNumber < spr/2) {
       dir = true;
     }
     else
@@ -604,7 +645,7 @@ void calibrate2() {   /// this is the calibration routine
 
 float read_angle()
 {
-  const int avg = 100;            //average a few readings
+  const int avg = 10;            //average a few readings
   int encoderReading = 0;
 
   disableTCInterrupts();        //can't use readEncoder while in closed loop
