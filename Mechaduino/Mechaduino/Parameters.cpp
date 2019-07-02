@@ -37,7 +37,7 @@ volatile float epsilon = 0.05;
 
 volatile int step_delay = 100;       // delay for safe sigle full steps
 
-const float iMAX = 1.0;             // Be careful adjusting this.  While the A4954 driver is rated for 2.0 Amp peak currents, it cannot handle these currents continuously.  Depending on how you operate the Mechaduino, you may be able to safely raise this value...please refer to the A4954 datasheet for more info
+volatile float iMAX = 1.0;             // Be careful adjusting this.  While the A4954 driver is rated for 2.0 Amp peak currents, it cannot handle these currents continuously.  Depending on how you operate the Mechaduino, you may be able to safely raise this value...please refer to the A4954 datasheet for more info
 const float rSense = 0.150;
 volatile int uMAX = (255/3.3)*(iMAX*10*rSense);   // 255 for 8-bit pwm, 1023 for 10 bit, must also edit analogFastWrite
 volatile float uMINf = 0.05;

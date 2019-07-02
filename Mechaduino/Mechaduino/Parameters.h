@@ -41,7 +41,7 @@ extern volatile float epsilon;  // ignore angles smaller than this in PID (dead 
 
 extern volatile int step_delay;
 
-extern const float iMAX;
+extern volatile float iMAX;
 extern const float rSense;
 extern volatile int uMAX;
 extern volatile float uMINf;

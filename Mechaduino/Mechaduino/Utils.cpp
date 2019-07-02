@@ -977,7 +977,9 @@ void parameterEdit_o() {
   SerialUSB.println(PA, DEC);
   SerialUSB.print("e ----- epsilon = ");
   SerialUSB.println(epsilon, DEC);
-  SerialUSB.print("m ----- umin (factor) = ");
+  SerialUSB.print("i ----- imax (current) = ");
+  SerialUSB.println(iMAX, DEC);
+  SerialUSB.print("m ----- uminf (factor) = ");
   SerialUSB.println(uMINf, DEC);
   SerialUSB.println();
 
@@ -1005,12 +1007,22 @@ void parameterEdit_o() {
       SerialUSB.println(epsilon, DEC);
       break;
 
+    case 'x':
+
+      SerialUSB.println("imax = ?");
+      while (SerialUSB.available() == 0)  {}
+      iMAX = SerialUSB.parseFloat();
+      SerialUSB.print("new imax = ");
+      SerialUSB.println(iMAX, DEC);
+      uMAX = (255/3.3)*(iMAX*10*rSense);
+      break;
+
     case 'm':
 
-      SerialUSB.println("umin = ?");
+      SerialUSB.println("uminf = ?");
       while (SerialUSB.available() == 0)  {}
       uMINf = SerialUSB.parseFloat();
-      SerialUSB.print("new umin = ");
+      SerialUSB.print("new uminf = ");
       SerialUSB.println(uMINf, DEC);
       break;
 
